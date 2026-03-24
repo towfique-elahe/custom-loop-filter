@@ -2,71 +2,76 @@
 /*
 Plugin Name: Custom Loop Grid with Filter
 Description: A custom plugin that adds a loop grid with filtering options using shortcodes.
-Version: 1.7
-Author: Orbit570
+Version: 1.8
+Author: Towfique Elahe
 Author URI: https://towfiqueelahe.com/
 */
 
-// Ensure the file is being loaded as a plugin
 if ( ! defined( 'ABSPATH' ) ) {
-    exit; // Exit if accessed directly
+    exit;
 }
 
-// Register Shortcodes
+// -------------------------------------------------------
+// Filter shortcodes
+// -------------------------------------------------------
 
-// General function to handle filter dropdown
-function custom_generate_filter($taxonomies) {
+function custom_generate_filter( $taxonomies ) {
     ob_start();
 
-    // Taxonomy labels in German
     $taxonomy_labels = array(
-        'directory_category' => 'Verzeichniskategorien',
-        'designation'        => 'Fachrichtungen',
-        'location'           => 'Standort',
+        'directory_category'  => 'Verzeichniskategorien',
+        'designation'         => 'Fachrichtungen',
+        'location'            => 'Standort',
+        'directory_specialty' => 'Kategorien',
     );
 
     echo '<div id="customFilter" class="filter-container">';
 
-    // Search bar
     echo '<div class="search-bar">';
-    echo '<input type="text" id="search-title" placeholder="Nach Namen suchen...">';
+    echo '<input type="text" id="search-title" placeholder="Nach Namen suchen...">';
     echo '</div>';
 
     echo '<div class="filter-group-container">';
 
-    foreach ($taxonomies as $taxonomy) {
-
-        $terms = get_terms(array(
+    foreach ( $taxonomies as $taxonomy ) {
+        $terms = get_terms( array(
             'taxonomy'   => $taxonomy,
             'orderby'    => 'name',
             'order'      => 'ASC',
             'hide_empty' => false,
-        ));
+        ) );
 
-        if (!empty($terms) && !is_wp_error($terms)) {
-
-            // Use German label if defined, fallback otherwise
-            $label = isset($taxonomy_labels[$taxonomy])
-                ? $taxonomy_labels[$taxonomy]
-                : ucfirst(str_replace('_', ' ', $taxonomy));
+        if ( ! empty( $terms ) && ! is_wp_error( $terms ) ) {
+            $label = isset( $taxonomy_labels[ $taxonomy ] )
+                ? $taxonomy_labels[ $taxonomy ]
+                : ucfirst( str_replace( '_', ' ', $taxonomy ) );
 
             echo '<div class="filter-group">';
 
-            echo '<select 
-                    id="' . esc_attr($taxonomy) . '-filter"
-                    class="taxonomy-filter"
-                    data-taxonomy="' . esc_attr($taxonomy) . '">';
-
-            echo '<option value="">Alle ' . esc_html($label) . '</option>';
-
-            foreach ($terms as $term) {
-                echo '<option value="' . esc_attr($term->term_id) . '">'
-                        . esc_html($term->name) .
-                     '</option>';
+            if ( $taxonomy === 'location' ) {
+                echo '<div class="location-search-container">';
+                echo '<input type="text" 
+                        id="location-search" 
+                        class="location-search" 
+                        placeholder="' . esc_attr( $label ) . ' suchen..." 
+                        autocomplete="off">';
+                echo '<i class="fa fa-search" aria-hidden="true"></i>';
+                echo '</div>';
+            } else {
+                echo '<select 
+                        id="' . esc_attr( $taxonomy ) . '-filter"
+                        class="taxonomy-filter"
+                        data-taxonomy="' . esc_attr( $taxonomy ) . '">';
+                echo '<option value="">' . esc_html( $label ) . '</option>';
+                foreach ( $terms as $term ) {
+                    echo '<option value="' . esc_attr( $term->term_id ) . '">'
+                        . esc_html( $term->name ) .
+                        '</option>';
+                }
+                echo '</select>';
+                echo '<i class="fa fa-chevron-down" aria-hidden="true"></i>';
             }
 
-            echo '</select>';
-            echo '<i class="fa fa-chevron-down" aria-hidden="true"></i>';
             echo '</div>';
         }
     }
@@ -78,207 +83,331 @@ function custom_generate_filter($taxonomies) {
     return ob_get_clean();
 }
 
-// 1st Filter Shortcode: All three taxonomies
-function custom_filter_all_taxonomies_shortcode($atts) {
-    return custom_generate_filter(['directory_category', 'designation', 'location']);
+function custom_filter_all_taxonomies_shortcode( $atts ) {
+    return custom_generate_filter( [ 'directory_category', 'designation', 'location' ] );
 }
-add_shortcode('custom_filter_all_taxonomies', 'custom_filter_all_taxonomies_shortcode');
+add_shortcode( 'custom_filter_all_taxonomies', 'custom_filter_all_taxonomies_shortcode' );
 
-// 2nd Filter Shortcode: directory_category and location
-function custom_filter_directory_category_location_shortcode($atts) {
-    return custom_generate_filter(['directory_category', 'location']);
+function custom_filter_directory_category_location_shortcode( $atts ) {
+    return custom_generate_filter( [ 'directory_category', 'location' ] );
 }
-add_shortcode('custom_filter_directory_category_location', 'custom_filter_directory_category_location_shortcode');
+add_shortcode( 'custom_filter_directory_category_location', 'custom_filter_directory_category_location_shortcode' );
 
-// 3rd Filter Shortcode: location only
-function custom_filter_location_shortcode($atts) {
-    return custom_generate_filter(['location']);
+function custom_filter_location_shortcode( $atts ) {
+    return custom_generate_filter( [ 'location' ] );
 }
-add_shortcode('custom_filter_location', 'custom_filter_location_shortcode');
+add_shortcode( 'custom_filter_location', 'custom_filter_location_shortcode' );
 
-// Function to handle the grid display
-function custom_loop_grid_shortcode($atts) {
-    ob_start();
+function custom_filter_directory_specialty_location_shortcode( $atts ) {
+    return custom_generate_filter( [ 'directory_specialty', 'location' ] );
+}
+add_shortcode( 'custom_filter_directory_specialty_location', 'custom_filter_directory_specialty_location_shortcode' );
 
+// -------------------------------------------------------
+// Grid shortcode
+// -------------------------------------------------------
+
+function custom_loop_grid_shortcode( $atts ) {
     $atts = shortcode_atts( array(
-        'posts_per_page' => 9, // Default number of posts per page
-        'paged' => 1, // Default to the first page
+        'posts_per_page' => 9,
     ), $atts, 'custom_loop_grid' );
 
-    // Check if we are on a taxonomy page for 'directory_category'
-    if (is_tax('directory_category')) {
-        // Get the current taxonomy term object
-        $current_term = get_queried_object(); // Get the current term
-        $term_id = $current_term->term_id; // Get the term ID
-    } else {
-        $term_id = ''; // No filtering if not on a taxonomy page
-    }
+    // Pass config to JS
+    wp_localize_script( 'custom-loop-filter-scripts', 'clgConfig', array(
+        'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
+        'nonce'        => wp_create_nonce( 'clg_filter_nonce' ),
+        'postsPerPage' => intval( $atts['posts_per_page'] ),
+        'isTaxPage'    => is_tax( 'directory_category' ) ? 1 : 0,
+        'termId'       => is_tax( 'directory_category' ) ? get_queried_object()->term_id : 0,
+    ) );
 
-    // Get the current page for pagination
-    $paged = get_query_var('paged') ? get_query_var('paged') : 1;
+    ob_start();
 
-    // WP_Query args to filter posts based on the current 'directory_category'
+    // Initial load: first page, no filters
+    $paged = get_query_var( 'paged' ) ? get_query_var( 'paged' ) : 1;
+
     $args = array(
-        'post_type' => 'directory', // Your custom post type
-        'posts_per_page' => $atts['posts_per_page'],
-        'paged' => $paged,
+        'post_type'      => 'directory',
+        'posts_per_page' => intval( $atts['posts_per_page'] ),
+        'paged'          => $paged,
     );
 
-    // If we're on a directory_category page, filter posts by the current category
-    if ($term_id) {
+    if ( is_tax( 'directory_category' ) ) {
+        $term_id          = get_queried_object()->term_id;
         $args['tax_query'] = array(
             array(
                 'taxonomy' => 'directory_category',
-                'field' => 'term_id',
-                'terms' => $term_id,
+                'field'    => 'term_id',
+                'terms'    => $term_id,
                 'operator' => 'IN',
             ),
         );
     }
 
-    // Query the posts
-    $query = new WP_Query($args);
+    $query = new WP_Query( $args );
 
-    if ($query->have_posts()) :
-        echo '<div id="customLoopGrid" class="custom-loop-grid">';
-        while ($query->have_posts()) : $query->the_post();
-            // Get post taxonomies (or any taxonomy)
-            $directory_category_terms = get_the_terms(get_the_ID(), 'directory_category');
-            $location_terms = get_the_terms(get_the_ID(), 'location');
-            $designation_terms = get_the_terms(get_the_ID(), 'designation');
-            
-            // Collect term IDs for each taxonomy
-            $directory_category_ids = array_map(function($cat) { return $cat->term_id; }, $directory_category_terms);
-            $location_ids = array_map(function($cat) { return $cat->term_id; }, $location_terms);
-            $designation_ids = array_map(function($cat) { return $cat->term_id; }, $designation_terms);
+    echo '<div id="customLoopGrid" class="custom-loop-grid">';
 
-            // Convert IDs to strings (for filtering comparison in JS)
-            $directory_category_list = implode(',', $directory_category_ids);
-            $location_list = implode(',', $location_ids);
-            $designation_list = implode(',', $designation_ids);
+    if ( $query->have_posts() ) {
+        while ( $query->have_posts() ) {
+            $query->the_post();
+            clg_render_grid_item( get_the_ID() );
+        }
+        wp_reset_postdata();
+    }
 
-            // Get featured image or set fallback image
-            $featured_image = has_post_thumbnail() ? get_the_post_thumbnail_url(get_the_ID(), 'full') : plugin_dir_url(__FILE__) . 'assets/media/user-fallback.png';
+    echo '</div>';
 
-            ?>
-<div class="grid-item" data-directory_category="<?php echo esc_attr($directory_category_list); ?>"
-    data-location="<?php echo esc_attr($location_list); ?>"
-    data-designation="<?php echo esc_attr($designation_list); ?>">
+    echo '<div id="customNoResults" class="no-posts-found" style="display:none;">';
+    echo '<p>Es wurden keine passenden Einträge gefunden.</p>';
+    echo '</div>';
 
-    <!-- Display Featured Image or Fallback -->
-    <div class="grid-item-image">
-        <img src="<?php echo esc_url($featured_image); ?>" alt="<?php the_title(); ?>">
-    </div>
-
-    <h3><?php the_title(); ?></h3>
-
-    <!-- Display Directory Category, Location, and Designation -->
-    <div class="taxonomy-info">
-        <span class="taxonomy directory-category">
-            <?php 
-                        if (!empty($directory_category_terms)) {
-                            echo '<span class="icon-container"><i class="fa fa-user-md" aria-hidden="true"></i></span>' . esc_html(implode(', ', wp_list_pluck($directory_category_terms, 'name')));
-                        }
-                        ?>
-        </span>
-        <span class="taxonomy designation">
-            <?php 
-                        if (!empty($designation_terms)) {
-                            echo '<span class="icon-container"><i class="fa fa-stethoscope" aria-hidden="true"></i></span>' . esc_html(implode(', ', wp_list_pluck($designation_terms, 'name')));
-                        }
-                        ?>
-        </span>
-        <span class="taxonomy location">
-            <?php 
-                        if (!empty($location_terms)) {
-                            echo '<span class="icon-container"><i class="fa fa-map-marker" aria-hidden="true"></i></span>' . esc_html(implode(', ', wp_list_pluck($location_terms, 'name')));
-                        }
-                        ?>
-        </span>
-    </div>
-
-    <div class="content"><?php the_excerpt(); ?></div>
-</div>
-<?php
-        endwhile;
-        echo '</div>';
-
-        echo '<div id="customNoResults" class="no-posts-found" style="display:none;">';
-        echo '<p>Es wurden keine passenden Einträge gefunden.</p>';
-        echo '</div>';
-
-        // Pagination
-        echo '<div id="customPagination" class="pagination">';
-        echo paginate_links(array(
-            'total' => $query->max_num_pages,
-            'current' => $paged,
+    echo '<div id="customPagination" class="pagination">';
+    if ( $query->have_posts() || $query->max_num_pages > 1 ) {
+        echo paginate_links( array(
+            'total'     => $query->max_num_pages,
+            'current'   => $paged,
             'prev_text' => '&laquo; Previous',
             'next_text' => 'Next &raquo;',
-        ));
-        echo '</div>';
+        ) );
+    }
+    echo '</div>';
 
-        wp_reset_postdata();
-    else :
-        // Display "No Posts Found" message (visible only when no posts)
-        echo '<div class="no-posts-found">';
-        echo '<p>Es wurden keine passenden Einträge gefunden.</p>';
-        echo '</div>';
-    endif;
+    if ( ! $query->have_posts() && $query->post_count === 0 ) {
+        echo '<div class="no-posts-found"><p>Es wurden keine passenden Einträge gefunden.</p></div>';
+    }
 
     return ob_get_clean();
 }
-add_shortcode('custom_loop_grid', 'custom_loop_grid_shortcode');
+add_shortcode( 'custom_loop_grid', 'custom_loop_grid_shortcode' );
 
-// Enqueue Styles and Scripts
+// -------------------------------------------------------
+// Shared helper: render a single grid item
+// -------------------------------------------------------
+
+function clg_render_grid_item( $post_id ) {
+    $directory_category_terms = get_the_terms( $post_id, 'directory_category' );
+    $location_terms           = get_the_terms( $post_id, 'location' );
+    $designation_terms        = get_the_terms( $post_id, 'designation' );
+    $specialty_terms          = get_the_terms( $post_id, 'directory_specialty' );
+
+    $directory_category_ids = ( ! empty( $directory_category_terms ) && ! is_wp_error( $directory_category_terms ) )
+        ? array_map( fn( $t ) => $t->term_id, $directory_category_terms ) : [];
+    $location_ids           = ( ! empty( $location_terms ) && ! is_wp_error( $location_terms ) )
+        ? array_map( fn( $t ) => $t->term_id, $location_terms ) : [];
+    $designation_ids        = ( ! empty( $designation_terms ) && ! is_wp_error( $designation_terms ) )
+        ? array_map( fn( $t ) => $t->term_id, $designation_terms ) : [];
+    $specialty_ids          = ( ! empty( $specialty_terms ) && ! is_wp_error( $specialty_terms ) )
+        ? array_map( fn( $t ) => $t->term_id, $specialty_terms ) : [];
+
+    $featured_image = has_post_thumbnail( $post_id )
+        ? get_the_post_thumbnail_url( $post_id, 'full' )
+        : plugin_dir_url( __FILE__ ) . 'assets/media/user-fallback.png';
+
+    ?>
+    <div class="grid-item"
+         data-directory_category="<?php echo esc_attr( implode( ',', $directory_category_ids ) ); ?>"
+         data-location="<?php echo esc_attr( implode( ',', $location_ids ) ); ?>"
+         data-designation="<?php echo esc_attr( implode( ',', $designation_ids ) ); ?>"
+         data-directory_specialty="<?php echo esc_attr( implode( ',', $specialty_ids ) ); ?>">
+
+        <div class="grid-item-image">
+            <img src="<?php echo esc_url( $featured_image ); ?>" alt="<?php echo esc_attr( get_the_title( $post_id ) ); ?>">
+        </div>
+
+        <h3><?php echo esc_html( get_the_title( $post_id ) ); ?></h3>
+
+        <div class="taxonomy-info">
+            <span class="taxonomy directory-category">
+                <?php if ( ! empty( $specialty_terms ) && ! is_wp_error( $specialty_terms ) ) : ?>
+                    <span class="icon-container"><i class="fa fa-user-md" aria-hidden="true"></i></span>
+                    <?php echo esc_html( implode( ', ', wp_list_pluck( $specialty_terms, 'name' ) ) ); ?>
+                <?php endif; ?>
+            </span>
+            <span class="taxonomy designation">
+                <?php if ( ! empty( $designation_terms ) && ! is_wp_error( $designation_terms ) ) : ?>
+                    <span class="icon-container"><i class="fa fa-stethoscope" aria-hidden="true"></i></span>
+                    <?php echo esc_html( implode( ', ', wp_list_pluck( $designation_terms, 'name' ) ) ); ?>
+                <?php endif; ?>
+            </span>
+            <span class="taxonomy location">
+                <?php if ( ! empty( $location_terms ) && ! is_wp_error( $location_terms ) ) : ?>
+                    <span class="icon-container"><i class="fa fa-map-marker" aria-hidden="true"></i></span>
+                    <?php echo esc_html( implode( ', ', wp_list_pluck( $location_terms, 'name' ) ) ); ?>
+                <?php endif; ?>
+            </span>
+        </div>
+
+        <div class="content"><?php echo apply_filters( 'the_content', get_post_field( 'post_content', $post_id ) ); ?></div>
+    </div>
+    <?php
+}
+
+// -------------------------------------------------------
+// AJAX handler — runs server-side query across ALL pages
+// -------------------------------------------------------
+
+function clg_ajax_filter() {
+    check_ajax_referer( 'clg_filter_nonce', 'nonce' );
+
+    $posts_per_page       = isset( $_POST['posts_per_page'] ) ? intval( $_POST['posts_per_page'] ) : 9;
+    $paged                = isset( $_POST['paged'] ) ? intval( $_POST['paged'] ) : 1;
+    $title_search         = isset( $_POST['title_search'] ) ? sanitize_text_field( $_POST['title_search'] ) : '';
+    $location_search      = isset( $_POST['location_search'] ) ? sanitize_text_field( $_POST['location_search'] ) : '';
+    $taxonomy_filters     = isset( $_POST['taxonomy_filters'] ) && is_array( $_POST['taxonomy_filters'] )
+        ? $_POST['taxonomy_filters'] : [];
+    $locked_term_id       = isset( $_POST['locked_term_id'] ) ? intval( $_POST['locked_term_id'] ) : 0;
+
+    $args = array(
+        'post_type'      => 'directory',
+        'posts_per_page' => $posts_per_page,
+        'paged'          => $paged,
+        'post_status'    => 'publish',
+    );
+
+    // Title search
+    if ( $title_search !== '' ) {
+        $args['s'] = $title_search;
+    }
+
+    $tax_query = array( 'relation' => 'AND' );
+
+    // Locked taxonomy page term
+    if ( $locked_term_id ) {
+        $tax_query[] = array(
+            'taxonomy' => 'directory_category',
+            'field'    => 'term_id',
+            'terms'    => $locked_term_id,
+            'operator' => 'IN',
+        );
+    }
+
+    // Dropdown taxonomy filters
+    foreach ( $taxonomy_filters as $taxonomy => $term_id ) {
+        $taxonomy = sanitize_key( $taxonomy );
+        $term_id  = intval( $term_id );
+        if ( $term_id && taxonomy_exists( $taxonomy ) ) {
+            $tax_query[] = array(
+                'taxonomy' => $taxonomy,
+                'field'    => 'term_id',
+                'terms'    => $term_id,
+                'operator' => 'IN',
+            );
+        }
+    }
+
+    // Location text search — search across all location terms
+    if ( $location_search !== '' ) {
+        $location_terms = get_terms( array(
+            'taxonomy'   => 'location',
+            'search'     => $location_search,
+            'hide_empty' => false,
+        ) );
+
+        if ( ! empty( $location_terms ) && ! is_wp_error( $location_terms ) ) {
+            $location_ids = wp_list_pluck( $location_terms, 'term_id' );
+            $tax_query[]  = array(
+                'taxonomy' => 'location',
+                'field'    => 'term_id',
+                'terms'    => $location_ids,
+                'operator' => 'IN',
+            );
+        } else {
+            // No matching location terms → force zero results
+            wp_send_json_success( array(
+                'html'          => '',
+                'found_posts'   => 0,
+                'max_num_pages' => 0,
+                'paged'         => $paged,
+                'pagination'    => '',
+            ) );
+        }
+    }
+
+    if ( count( $tax_query ) > 1 ) {
+        $args['tax_query'] = $tax_query;
+    }
+
+    $query = new WP_Query( $args );
+
+    ob_start();
+    if ( $query->have_posts() ) {
+        while ( $query->have_posts() ) {
+            $query->the_post();
+            clg_render_grid_item( get_the_ID() );
+        }
+        wp_reset_postdata();
+    }
+    $html = ob_get_clean();
+
+    // Build pagination HTML
+    $pagination = paginate_links( array(
+        'total'     => $query->max_num_pages,
+        'current'   => $paged,
+        'type'      => 'plain',
+        'prev_text' => '&laquo; Previous',
+        'next_text' => 'Next &raquo;',
+    ) );
+
+    wp_send_json_success( array(
+        'html'          => $html,
+        'found_posts'   => $query->found_posts,
+        'max_num_pages' => $query->max_num_pages,
+        'paged'         => $paged,
+        'pagination'    => $pagination ? $pagination : '',
+    ) );
+}
+add_action( 'wp_ajax_clg_filter', 'clg_ajax_filter' );
+add_action( 'wp_ajax_nopriv_clg_filter', 'clg_ajax_filter' );
+
+// -------------------------------------------------------
+// Assets
+// -------------------------------------------------------
+
 function custom_loop_filter_assets() {
-    $css_path = plugin_dir_path(__FILE__) . 'assets/css/styles.css';
-    $js_path  = plugin_dir_path(__FILE__) . 'assets/js/scripts.js';
+    $css_path = plugin_dir_path( __FILE__ ) . 'assets/css/styles.css';
+    $js_path  = plugin_dir_path( __FILE__ ) . 'assets/js/scripts.js';
 
     wp_enqueue_style(
         'custom-loop-filter-styles',
-        plugin_dir_url(__FILE__) . 'assets/css/styles.css',
+        plugin_dir_url( __FILE__ ) . 'assets/css/styles.css',
         array(),
-        filemtime($css_path)
+        filemtime( $css_path )
     );
 
     wp_enqueue_script(
         'custom-loop-filter-scripts',
-        plugin_dir_url(__FILE__) . 'assets/js/scripts.js',
-        array('jquery'),
-        filemtime($js_path),
+        plugin_dir_url( __FILE__ ) . 'assets/js/scripts.js',
+        array( 'jquery' ),
+        filemtime( $js_path ),
         true
     );
 }
-add_action('wp_enqueue_scripts', 'custom_loop_filter_assets');
-
-// Create assets folder with styles and scripts
-function custom_loop_filter_plugin_setup() {
-    if ( ! file_exists(plugin_dir_path(__FILE__) . 'assets/css') ) {
-        mkdir(plugin_dir_path(__FILE__) . 'assets/css', 0755, true);
-    }
-    if ( ! file_exists(plugin_dir_path(__FILE__) . 'assets/js') ) {
-        mkdir(plugin_dir_path(__FILE__) . 'assets/js', 0755, true);
-    }
-}
-add_action('admin_init', 'custom_loop_filter_plugin_setup');
+add_action( 'wp_enqueue_scripts', 'custom_loop_filter_assets' );
 
 function custom_loop_filter_select2_assets() {
-
-    // Select2 CSS
     wp_enqueue_style(
         'select2-css',
         'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
         array(),
         '4.1.0'
     );
-
-    // Select2 JS
     wp_enqueue_script(
         'select2-js',
         'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
-        array('jquery'),
+        array( 'jquery' ),
         '4.1.0',
         true
     );
 }
-add_action('wp_enqueue_scripts', 'custom_loop_filter_select2_assets');
+add_action( 'wp_enqueue_scripts', 'custom_loop_filter_select2_assets' );
+
+function custom_loop_filter_plugin_setup() {
+    if ( ! file_exists( plugin_dir_path( __FILE__ ) . 'assets/css' ) ) {
+        mkdir( plugin_dir_path( __FILE__ ) . 'assets/css', 0755, true );
+    }
+    if ( ! file_exists( plugin_dir_path( __FILE__ ) . 'assets/js' ) ) {
+        mkdir( plugin_dir_path( __FILE__ ) . 'assets/js', 0755, true );
+    }
+}
+add_action( 'admin_init', 'custom_loop_filter_plugin_setup' );
